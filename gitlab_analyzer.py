@@ -251,6 +251,8 @@ def get_pipeline_jobs(pipeline_id):
             else:
                 print("None")
 
+            return failed_jobs
+
         elif response.status_code == 401:
             print("Error: GitLab authentication failed.")
 
@@ -266,10 +268,60 @@ def get_pipeline_jobs(pipeline_id):
     except requests.exceptions.RequestException as error:
         print(f"Error connecting to GitLab: {error}")
 
+def get_job_log(job_id):
+    """Retrieve and display the latest portion of a job log."""
+
+    url = (
+        f"{GITLAB_URL}/api/v4/projects/"
+        f"{GITLAB_PROJECT_ID}/jobs/{job_id}/trace"
+    )
+
+    headers = {
+        "PRIVATE-TOKEN": GITLAB_TOKEN
+    }
+
+    try:
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            log = response.text
+
+            if not log:
+                print("\nJob log is empty.")
+                return
+
+            # Display only the latest 50 lines.
+            log_lines = log.splitlines()
+            latest_lines = log_lines[-50:]
+
+            print("\nJob Log (Latest 50 Lines)")
+            print("------------------------")
+
+            print("\n".join(latest_lines))
+
+        elif response.status_code == 401:
+            print("Error: GitLab authentication failed.")
+
+        elif response.status_code == 404:
+            print("Error: Job not found.")
+
+        else:
+            print(
+                f"Error: GitLab API returned "
+                f"status {response.status_code}"
+            )
+
+    except requests.exceptions.RequestException as error:
+        print(f"Error connecting to GitLab: {error}")
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: python gitlab_analyzer.py <command>")
-        print("Available commands: project, pipeline")
+        print("Available commands: project, pipeline, logs")
         return
 
     command = sys.argv[1]
@@ -283,9 +335,26 @@ def main():
         if pipeline_id:
             get_pipeline_jobs(pipeline_id)
 
+    elif command == "logs":
+        pipeline_id = get_latest_pipeline()
+
+        if pipeline_id:
+            failed_jobs = get_pipeline_jobs(pipeline_id)
+
+            if failed_jobs:
+                for job in failed_jobs:
+                    print(
+                        f"\nFetching log for failed job: "
+                        f"{job['name']}"
+                    )
+                    print(f"Job ID: {job['id']}")
+                    get_job_log(job["id"])
+            else:
+                print("\nNo failed jobs found in the latest pipeline.")
+
     else:
         print(f"Error: Unknown command '{command}'")
-        print("Available commands: project, pipeline")
+        print("Available commands: project, pipeline, logs")
 
 
 if __name__ == "__main__":
