@@ -131,7 +131,7 @@ def get_latest_pipeline():
                     f"No pipelines found for branch "
                     f"'{GITLAB_BRANCH}'."
                 )
-                return
+                return None
 
             pipeline = pipelines[0]
             pipeline_id = pipeline["id"]
@@ -152,7 +152,7 @@ def get_latest_pipeline():
                     f"Error retrieving pipeline details: "
                     f"status {details_response.status_code}"
                 )
-                return
+                return None
 
             pipeline_details = details_response.json()
 
@@ -172,11 +172,90 @@ def get_latest_pipeline():
             else:
                 print("Duration: Not available")
 
+            return pipeline_id
+
+        elif response.status_code == 401:
+            print("Error: GitLab authentication failed.")
+            return None
+
+        elif response.status_code == 404:
+            print("Error: Project not found.")
+            return None
+
+        else:
+            print(
+                f"Error: GitLab API returned "
+                f"status {response.status_code}"
+            )
+            return None
+
+    except requests.exceptions.RequestException as error:
+        print(f"Error connecting to GitLab: {error}")
+        return None
+
+def get_pipeline_jobs(pipeline_id):
+    """Retrieve jobs associated with a pipeline."""
+
+    url = (
+        f"{GITLAB_URL}/api/v4/projects/"
+        f"{GITLAB_PROJECT_ID}/pipelines/{pipeline_id}/jobs"
+    )
+
+    headers = {
+        "PRIVATE-TOKEN": GITLAB_TOKEN
+    }
+
+    try:
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            jobs = response.json()
+
+            if not jobs:
+                print("\nNo jobs found for this pipeline.")
+                return
+
+            print("\nJobs")
+            print("----")
+
+            failed_jobs = []
+
+            for job in jobs:
+                duration = job.get("duration")
+
+                if duration is not None:
+                    minutes = int(duration // 60)
+                    seconds = int(duration % 60)
+                    duration_text = f"{minutes}m {seconds}s"
+                else:
+                    duration_text = "Not available"
+
+                print(f"\nJob Name: {job['name']}")
+                print(f"Stage: {job['stage']}")
+                print(f"Status: {job['status']}")
+                print(f"Duration: {duration_text}")
+
+                if job["status"] == "failed":
+                    failed_jobs.append(job)
+
+            print("\nFailed Jobs")
+            print("-----------")
+
+            if failed_jobs:
+                for job in failed_jobs:
+                    print(f"- {job['name']}")
+            else:
+                print("None")
+
         elif response.status_code == 401:
             print("Error: GitLab authentication failed.")
 
         elif response.status_code == 404:
-            print("Error: Project not found.")
+            print("Error: Pipeline not found.")
 
         else:
             print(
@@ -197,8 +276,13 @@ def main():
 
     if command == "project":
         get_project()
+
     elif command == "pipeline":
-        get_latest_pipeline()
+        pipeline_id = get_latest_pipeline()
+
+        if pipeline_id:
+            get_pipeline_jobs(pipeline_id)
+
     else:
         print(f"Error: Unknown command '{command}'")
         print("Available commands: project, pipeline")
