@@ -321,7 +321,7 @@ def get_job_log(job_id):
 def main():
     if len(sys.argv) < 2:
         print("Usage: python gitlab_analyzer.py <command>")
-        print("Available commands: project, pipeline, logs")
+        print("Available commands: project, pipeline, jobs, logs")
         return
 
     command = sys.argv[1]
@@ -330,6 +330,12 @@ def main():
         get_project()
 
     elif command == "pipeline":
+        pipeline_id = get_latest_pipeline()
+
+        if pipeline_id:
+            get_pipeline_jobs(pipeline_id)
+
+    elif command == "jobs":
         pipeline_id = get_latest_pipeline()
 
         if pipeline_id:
@@ -354,7 +360,7 @@ def main():
 
     else:
         print(f"Error: Unknown command '{command}'")
-        print("Available commands: project, pipeline, logs")
+        print("Available commands: project, pipeline, jobs, logs")
 
 
 if __name__ == "__main__":
