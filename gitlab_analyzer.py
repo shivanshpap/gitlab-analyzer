@@ -193,6 +193,111 @@ def get_latest_pipeline():
         print(f"Error connecting to GitLab: {error}")
         return None
 
+def get_pipeline_history():
+    """Retrieve the last 10 pipelines for the configured branch."""
+
+    url = (
+        f"{GITLAB_URL}/api/v4/projects/"
+        f"{GITLAB_PROJECT_ID}/pipelines"
+    )
+
+    headers = {
+        "PRIVATE-TOKEN": GITLAB_TOKEN
+    }
+
+    params = {
+        "ref": GITLAB_BRANCH,
+        "per_page": 10
+    }
+
+    try:
+        response = requests.get(
+            url,
+            headers=headers,
+            params=params,
+            timeout=10
+        )
+
+        if response.status_code == 200:
+            pipelines = response.json()
+
+            if not pipelines:
+                print(
+                    f"No pipelines found for branch "
+                    f"'{GITLAB_BRANCH}'."
+                )
+                return
+
+            print("\nPipeline History")
+            print("----------------")
+
+            success_count = 0
+            failure_count = 0
+
+            for pipeline in pipelines:
+                pipeline_id = pipeline["id"]
+
+                details_url = (
+                    f"{GITLAB_URL}/api/v4/projects/"
+                    f"{GITLAB_PROJECT_ID}/pipelines/{pipeline_id}"
+                )
+
+                details_response = requests.get(
+                    details_url,
+                    headers=headers,
+                    timeout=10
+                )
+
+                if details_response.status_code != 200:
+                    print(
+                        f"\nCould not retrieve details for "
+                        f"pipeline {pipeline_id}."
+                    )
+                    continue
+
+                pipeline_details = details_response.json()
+                status = pipeline_details["status"]
+
+                if status == "success":
+                    success_count += 1
+                elif status == "failed":
+                    failure_count += 1
+
+                duration = pipeline_details.get("duration")
+
+                if duration is not None:
+                    minutes = int(duration // 60)
+                    seconds = int(duration % 60)
+                    duration_text = f"{minutes}m {seconds}s"
+                else:
+                    duration_text = "Not available"
+
+                print(f"\nPipeline ID: {pipeline_details['id']}")
+                print(f"Status: {status}")
+                print(f"Branch: {pipeline_details['ref']}")
+                print(f"Commit: {pipeline_details['sha']}")
+                print(f"Duration: {duration_text}")
+
+            print("\nPipeline Statistics")
+            print("-------------------")
+            print(f"Successful: {success_count}")
+            print(f"Failed: {failure_count}")
+
+        elif response.status_code == 401:
+            print("Error: GitLab authentication failed.")
+
+        elif response.status_code == 404:
+            print("Error: Project not found.")
+
+        else:
+            print(
+                f"Error: GitLab API returned "
+                f"status {response.status_code}"
+            )
+
+    except requests.exceptions.RequestException as error:
+        print(f"Error connecting to GitLab: {error}")
+
 def get_pipeline_jobs(pipeline_id):
     """Retrieve jobs associated with a pipeline."""
 
@@ -321,7 +426,7 @@ def get_job_log(job_id):
 def main():
     if len(sys.argv) < 2:
         print("Usage: python gitlab_analyzer.py <command>")
-        print("Available commands: project, pipeline, jobs, logs")
+        print("Available commands: project, pipeline, jobs, history, logs")
         return
 
     command = sys.argv[1]
@@ -340,6 +445,9 @@ def main():
 
         if pipeline_id:
             get_pipeline_jobs(pipeline_id)
+
+    elif command == "history":
+        get_pipeline_history()
 
     elif command == "logs":
         pipeline_id = get_latest_pipeline()
@@ -360,7 +468,7 @@ def main():
 
     else:
         print(f"Error: Unknown command '{command}'")
-        print("Available commands: project, pipeline, jobs, logs")
+        print("Available commands: project, pipeline, jobs, history, logs")
 
 
 if __name__ == "__main__":
